@@ -4,6 +4,7 @@ use std::fs;
 use std::io::{self, Write};
 use std::ops::ControlFlow;
 use std::os::unix::fs::PermissionsExt;
+use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process;
 
@@ -86,7 +87,7 @@ fn dispatch_command(pathenv: &str, parsed_command: ParsedCommand<'_>) -> Control
         }
         Command::External(bin, args) => {
             if let Some(path) = resolve_path(pathenv, bin) {
-                run_program(&path, args);
+                run_program(&path, bin, args);
                 ControlFlow::Continue(())
             } else {
                 println!("{}: command not found", bin);
@@ -96,8 +97,11 @@ fn dispatch_command(pathenv: &str, parsed_command: ParsedCommand<'_>) -> Control
     }
 }
 
-fn run_program(path: &Path, args: &[&str]) {
-    match process::Command::new(path).args(args).spawn() {
+fn run_program(path: &Path, bin: &str, args: &[&str]) {
+    let mut cmd = process::Command::new(path);
+    cmd.arg0(bin);
+    cmd.args(args);
+    match cmd.spawn() {
         Ok(mut handle) => match handle.wait() {
             Ok(_status) => {}
             Err(e) => eprintln! {"Early termination of process {}", e},
