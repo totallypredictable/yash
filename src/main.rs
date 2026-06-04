@@ -12,10 +12,14 @@ fn main() {
 
         io::stdin().read_line(&mut command).unwrap();
 
-        if command.trim() == "exit" {
-            break;
-        }
+        let words: Vec<&str> = command.trim().split_whitespace().collect();
 
-        println!("{}: command not found", command.trim());
+        if words[0].trim() == "exit" {
+            break;
+        } else if words[0] == "echo" {
+            println!("{}", words[1..].join(" "));
+        } else {
+            println!("{}: command not found", command.trim());
+        }
     }
 }
