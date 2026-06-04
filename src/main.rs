@@ -43,7 +43,7 @@ fn main() {
                     println!(
                         "{} is {:?}",
                         words[1],
-                        resolve_path(&pathenv, words[1]).unwrap() // TODO unnecessary double call. Call the function one and match against its return?
+                        resolve_path(&pathenv, words[1]).unwrap().to_str() // TODO unnecessary double call. Call the function one and match against its return?
                     );
                 } else {
                     println!("{}: not found", words[1]);
