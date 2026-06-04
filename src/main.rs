@@ -41,7 +41,7 @@ fn main() {
                     println!("{} is a shell builtin", words[1]);
                 } else if resolve_path(&pathenv, words[1]) != None {
                     println!(
-                        "{} is {:?}",
+                        "{} is {}",
                         words[1],
                         resolve_path(&pathenv, words[1]).unwrap().to_str().unwrap() // TODO unnecessary double call. Call the function one and match against its return?
                     );
