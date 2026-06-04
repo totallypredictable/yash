@@ -50,6 +50,7 @@ impl<'a> ParsedCommand<'a> {
                 "exit" => Command::Exit,
                 "echo" => Command::Echo(remaining_tokens),
                 "type" => Command::Type(remaining_tokens),
+                "pwd" => Command::Pwd,
                 _ => Command::External(first_token, remaining_tokens),
             };
             Some(ParsedCommand { cmd: command_type })
@@ -63,6 +64,7 @@ enum Command<'a> {
     Exit,
     Echo(&'a [&'a str]),
     Type(&'a [&'a str]),
+    Pwd,
     External(&'a str, &'a [&'a str]),
 }
 
@@ -82,6 +84,12 @@ fn dispatch_command(pathenv: &str, parsed_command: ParsedCommand<'_>) -> Control
                 } else {
                     println!("{}: not found", cmd);
                 }
+            }
+            ControlFlow::Continue(())
+        }
+        Command::Pwd => {
+            if let Ok(path) = env::current_dir() {
+                println!("{}", path.display())
             }
             ControlFlow::Continue(())
         }
