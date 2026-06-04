@@ -8,7 +8,7 @@ use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process;
 
-const BUILTINS: &[&str] = &["exit", "echo", "type", "pwd"];
+const BUILTINS: &[&str] = &["exit", "echo", "type", "pwd", "cd"];
 
 fn resolve_path(pathenv: &str, command: &str) -> Option<PathBuf> {
     let rawpaths: Vec<&str> = pathenv.split(":").collect();
@@ -51,6 +51,7 @@ impl<'a> ParsedCommand<'a> {
                 "echo" => Command::Echo(remaining_tokens),
                 "type" => Command::Type(remaining_tokens),
                 "pwd" => Command::Pwd,
+                "cd" => Command::Cd(remaining_tokens),
                 _ => Command::External(first_token, remaining_tokens),
             };
             Some(ParsedCommand { cmd: command_type })
@@ -65,6 +66,7 @@ enum Command<'a> {
     Echo(&'a [&'a str]),
     Type(&'a [&'a str]),
     Pwd,
+    Cd(&'a [&'a str]),
     External(&'a str, &'a [&'a str]),
 }
 
@@ -90,6 +92,12 @@ fn dispatch_command(pathenv: &str, parsed_command: ParsedCommand<'_>) -> Control
         Command::Pwd => {
             if let Ok(path) = env::current_dir() {
                 println!("{}", path.display())
+            }
+            ControlFlow::Continue(())
+        }
+        Command::Cd(path) => {
+            if let Err(e) = env::set_current_dir(Path::new(path[0])) {
+                eprintln!("cd: {e}: No such file or directory")
             }
             ControlFlow::Continue(())
         }
