@@ -8,7 +8,7 @@ use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process;
 
-const BUILTINS: &[&str] = &["exit", "echo", "type"];
+const BUILTINS: &[&str] = &["exit", "echo", "type", "pwd"];
 
 fn resolve_path(pathenv: &str, command: &str) -> Option<PathBuf> {
     let rawpaths: Vec<&str> = pathenv.split(":").collect();
