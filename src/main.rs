@@ -2,8 +2,12 @@ use std::env;
 use std::fs;
 #[allow(unused_imports)]
 use std::io::{self, Write};
+use std::ops::ControlFlow;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
+use std::process;
+
+const BUILTINS: &[&str] = &["exit", "echo", "type"];
 
 fn resolve_path(pathenv: &str, command: &str) -> Option<PathBuf> {
     let rawpaths: Vec<&str> = pathenv.split(":").collect();
@@ -18,38 +22,104 @@ fn resolve_path(pathenv: &str, command: &str) -> Option<PathBuf> {
     return None;
 }
 
+fn prompt() {
+    print!("$ ");
+    io::stdout().flush().unwrap();
+}
+
+fn read_input() -> String {
+    let mut command: String = String::new();
+    io::stdin().read_line(&mut command).unwrap();
+    command
+}
+
+fn tokenize(command: &str) -> Vec<&str> {
+    let words: Vec<&str> = command.trim().split_whitespace().collect();
+    words
+}
+
+struct ParsedCommand<'a> {
+    cmd: Command<'a>,
+}
+
+impl<'a> ParsedCommand<'a> {
+    fn new(words: &'a [&'a str]) -> Option<Self> {
+        if let [first_token, remaining_tokens @ ..] = words {
+            let command_type = match *first_token {
+                "exit" => Command::Exit,
+                "echo" => Command::Echo(remaining_tokens),
+                "type" => Command::Type(remaining_tokens),
+                _ => Command::External(first_token, remaining_tokens),
+            };
+            Some(ParsedCommand { cmd: command_type })
+        } else {
+            return None;
+        }
+    }
+}
+
+enum Command<'a> {
+    Exit,
+    Echo(&'a [&'a str]),
+    Type(&'a [&'a str]),
+    External(&'a str, &'a [&'a str]),
+}
+
+fn dispatch_command(pathenv: &str, parsed_command: ParsedCommand<'_>) -> ControlFlow<()> {
+    match parsed_command.cmd {
+        Command::Exit => ControlFlow::Break(()),
+        Command::Echo(args) => {
+            println!("{}", args.join(" "));
+            ControlFlow::Continue(())
+        }
+        Command::Type(cmds) => {
+            for cmd in cmds {
+                if BUILTINS.contains(cmd) {
+                    println!("{} is a shell builtin", cmd);
+                } else if let Some(path) = resolve_path(pathenv, cmd) {
+                    println!("{} is {}", cmd, path.display(),);
+                } else {
+                    println!("{}: not found", cmd);
+                }
+            }
+            ControlFlow::Continue(())
+        }
+        Command::External(bin, args) => {
+            if let Some(path) = resolve_path(pathenv, bin) {
+                run_program(&path, args);
+                ControlFlow::Continue(())
+            } else {
+                println!("{}: command not found", bin);
+                ControlFlow::Continue(())
+            }
+        }
+    }
+}
+
+fn run_program(path: &Path, args: &[&str]) {
+    match process::Command::new(path).args(args).spawn() {
+        Ok(mut handle) => match handle.wait() {
+            Ok(_status) => {}
+            Err(e) => eprintln! {"Early termination of process {}", e},
+        },
+        Err(e) => eprintln!("Failed to spawn the process {}", e),
+    }
+}
+
 fn main() {
     let pathenv = env::var("PATH").unwrap();
 
     loop {
-        print!("$ ");
-        io::stdout().flush().unwrap();
+        prompt();
 
-        let mut command: String = String::new();
+        let command = read_input();
 
-        io::stdin().read_line(&mut command).unwrap();
+        let words = tokenize(&command);
 
-        let words: Vec<&str> = command.trim().split_whitespace().collect();
-
-        let builtins = ["exit", "echo", "type"];
-
-        match words[0].trim() {
-            "exit" => break,
-            "echo" => println!("{}", words[1..].join(" ")),
-            "type" => {
-                if builtins.contains(&words[1]) {
-                    println!("{} is a shell builtin", words[1]);
-                } else if resolve_path(&pathenv, words[1]) != None {
-                    println!(
-                        "{} is {}",
-                        words[1],
-                        resolve_path(&pathenv, words[1]).unwrap().to_str().unwrap() // TODO unnecessary double call. Call the function one and match against its return?
-                    );
-                } else {
-                    println!("{}: not found", words[1]);
-                }
+        if let Some(parsed_command) = ParsedCommand::new(&words) {
+            if let ControlFlow::Break(_) = dispatch_command(&pathenv, parsed_command) {
+                break;
             }
-            other => println!("{}: command not found", other.trim()),
         }
     }
 }
