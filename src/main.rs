@@ -96,8 +96,9 @@ fn dispatch_command(pathenv: &str, parsed_command: ParsedCommand<'_>) -> Control
             ControlFlow::Continue(())
         }
         Command::Cd(path) => {
-            if let Err(e) = env::set_current_dir(Path::new(path[0])) {
-                eprintln!("cd: {e}: No such file or directory")
+            let path = Path::new(path[0]);
+            if let Err(_) = env::set_current_dir(path) {
+                eprintln!("cd: {}: No such file or directory", path.display());
             }
             ControlFlow::Continue(())
         }
