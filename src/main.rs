@@ -10,6 +10,5 @@ fn main() {
 
     io::stdin().read_line(&mut command).unwrap();
 
-    print!("{command}: command not found");
-    io::stdout().flush().unwrap();
+    print!("{}: command not found", command.trim());
 }
