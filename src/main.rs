@@ -9,4 +9,6 @@ fn main() {
     let mut command: String = String::new();
 
     io::stdin().read_line(&mut command).unwrap();
+
+    println!("{command}: command not found");
 }
