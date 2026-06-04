@@ -23,7 +23,7 @@ fn main() {
                 if builtins.contains(&words[1]) {
                     println!("{} is a shell builtin", words[1]);
                 } else {
-                    println!("{}: command not found", words[1]);
+                    println!("{}: not found", words[1]);
                 }
             }
             other => println!("{}: command not found", other.trim()),
