@@ -14,12 +14,19 @@ fn main() {
 
         let words: Vec<&str> = command.trim().split_whitespace().collect();
 
-        if words[0].trim() == "exit" {
-            break;
-        } else if words[0] == "echo" {
-            println!("{}", words[1..].join(" "));
-        } else {
-            println!("{}: command not found", command.trim());
+        let builtins = ["exit", "echo", "type"];
+
+        match words[0].trim() {
+            "exit" => break,
+            "echo" => println!("{}", words[1..].join(" ")),
+            "type" => {
+                if builtins.contains(&words[1]) {
+                    println!("{} is a shell builtin", words[1]);
+                } else {
+                    println!("{}: command not found", words[1]);
+                }
+            }
+            other => println!("{}: command not found", other.trim()),
         }
     }
 }
