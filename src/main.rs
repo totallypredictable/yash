@@ -47,49 +47,110 @@ fn read_input() -> String {
     command
 }
 
+enum Backslash {
+    Yes,
+    No,
+}
+
 enum TokenizerState {
-    Normal,
+    Normal(Backslash),
     InSingleQuote,
-    InDoubleQuote,
-    Backslash,
+    InDoubleQuote(Backslash),
 }
 
 fn tokenize(command: &str) -> Vec<String> {
-    let mut state = TokenizerState::Normal;
+    let mut state = TokenizerState::Normal(Backslash::No);
     let mut args: Vec<String> = Vec::new();
     let mut buffer = String::new();
 
     for ch in command.chars() {
-        match (&state, ch) {
-            (TokenizerState::Backslash, _) => {
-                buffer.push(ch);
-                state = TokenizerState::Normal;
-            }
-            (TokenizerState::Normal, ' ') => {
-                if !buffer.is_empty() {
-                    args.push(std::mem::take(&mut buffer));
+        state = match state {
+            TokenizerState::Normal(Backslash::No) => match ch {
+                ' ' => {
+                    if !buffer.is_empty() {
+                        args.push(std::mem::take(&mut buffer));
+                    }
+                    TokenizerState::Normal(Backslash::No)
                 }
-            }
-            (TokenizerState::Normal, '"') => {
-                state = TokenizerState::InDoubleQuote;
-            }
-            (TokenizerState::Normal, '\'') => state = TokenizerState::InSingleQuote,
-            (TokenizerState::Normal, '~') => {
-                if let Ok(home) = env::var("HOME") {
-                    buffer.push_str(&home);
-                };
-            }
-            (TokenizerState::Normal, '\\') => {
-                state = TokenizerState::Backslash;
-            }
-            (TokenizerState::Normal, _) => {
+                '\\' => TokenizerState::Normal(Backslash::Yes),
+                '"' => TokenizerState::InDoubleQuote(Backslash::No),
+                '\'' => TokenizerState::InSingleQuote,
+                '~' => {
+                    if let Ok(home) = env::var("HOME") {
+                        buffer.push_str(&home);
+                    }
+                    TokenizerState::Normal(Backslash::No)
+                }
+                _ => {
+                    buffer.push(ch);
+                    TokenizerState::Normal(Backslash::No)
+                }
+            },
+
+            TokenizerState::Normal(Backslash::Yes) => {
                 buffer.push(ch);
+                TokenizerState::Normal(Backslash::No)
             }
-            (TokenizerState::InDoubleQuote, '"') => state = TokenizerState::Normal,
-            (TokenizerState::InDoubleQuote, _) => buffer.push(ch),
-            (TokenizerState::InSingleQuote, '\'') => state = TokenizerState::Normal,
-            (TokenizerState::InSingleQuote, _) => buffer.push(ch),
-        }
+
+            TokenizerState::InDoubleQuote(Backslash::No) => match ch {
+                '\\' => TokenizerState::InDoubleQuote(Backslash::Yes),
+                '"' => TokenizerState::Normal(Backslash::No),
+                _ => {
+                    buffer.push(ch);
+                    TokenizerState::InDoubleQuote(Backslash::No)
+                }
+            },
+
+            TokenizerState::InDoubleQuote(Backslash::Yes) => match ch {
+                _ if (['"', '\\', '$', '`', '\n']).contains(&ch) => {
+                    buffer.push(ch);
+                    TokenizerState::InDoubleQuote(Backslash::No)
+                }
+                _ => {
+                    buffer.push('\\');
+                    buffer.push(ch);
+                    TokenizerState::InDoubleQuote(Backslash::No)
+                }
+            },
+
+            TokenizerState::InSingleQuote => match ch {
+                '\'' => TokenizerState::Normal(Backslash::No),
+                _ => {
+                    buffer.push(ch);
+                    TokenizerState::InSingleQuote
+                }
+            },
+        };
+        // match (&state, ch) {
+        //     (TokenizerState::Backslash, _) => {
+        //         buffer.push(ch);
+        //         state = TokenizerState::Normal;
+        //     }
+        //     (TokenizerState::Normal, ' ') => {
+        //         if !buffer.is_empty() {
+        //             args.push(std::mem::take(&mut buffer));
+        //         }
+        //     }
+        //     (TokenizerState::Normal, '"') => {
+        //         state = TokenizerState::InDoubleQuote;
+        //     }
+        //     (TokenizerState::Normal, '\'') => state = TokenizerState::InSingleQuote,
+        //     (TokenizerState::Normal, '~') => {
+        //         if let Ok(home) = env::var("HOME") {
+        //             buffer.push_str(&home);
+        //         };
+        //     }
+        //     (TokenizerState::Normal, '\\') => {
+        //         state = TokenizerState::Backslash;
+        //     }
+        //     (TokenizerState::Normal, _) => {
+        //         buffer.push(ch);
+        //     }
+        //     (TokenizerState::InDoubleQuote, '"') => state = TokenizerState::Normal,
+        //     (TokenizerState::InDoubleQuote, _) => buffer.push(ch),
+        //     (TokenizerState::InSingleQuote, '\'') => state = TokenizerState::Normal,
+        //     (TokenizerState::InSingleQuote, _) => buffer.push(ch),
+        // }
     }
 
     if !buffer.is_empty() {
