@@ -63,6 +63,7 @@ fn tokenize(command: &str) -> Vec<String> {
         match (&state, ch) {
             (TokenizerState::Backslash, _) => {
                 buffer.push(ch);
+                state = TokenizerState::Normal;
             }
             (TokenizerState::Normal, ' ') => {
                 if !buffer.is_empty() {
