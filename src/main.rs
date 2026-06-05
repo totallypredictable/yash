@@ -51,6 +51,7 @@ enum TokenizerState {
     Normal,
     InSingleQuote,
     InDoubleQuote,
+    Backslash,
 }
 
 fn tokenize(command: &str) -> Vec<String> {
@@ -60,6 +61,9 @@ fn tokenize(command: &str) -> Vec<String> {
 
     for ch in command.chars() {
         match (&state, ch) {
+            (TokenizerState::Backslash, _) => {
+                buffer.push(ch);
+            }
             (TokenizerState::Normal, ' ') => {
                 if !buffer.is_empty() {
                     args.push(std::mem::take(&mut buffer));
@@ -73,6 +77,9 @@ fn tokenize(command: &str) -> Vec<String> {
                 if let Ok(home) = env::var("HOME") {
                     buffer.push_str(&home);
                 };
+            }
+            (TokenizerState::Normal, '\\') => {
+                state = TokenizerState::Backslash;
             }
             (TokenizerState::Normal, _) => {
                 buffer.push(ch);
@@ -214,7 +221,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_tokenize() {
+    fn test_tilde() {
         let command = "cd ~/Downloads/books";
         assert_eq!(
             tokenize(command),
@@ -222,6 +229,15 @@ mod tests {
                 String::from("cd"),
                 String::from("/Users/nashjr/Downloads/books")
             ])
+        );
+    }
+
+    #[test]
+    fn test_backslash() {
+        let command = "cd \\~/Downloads/books";
+        assert_eq!(
+            tokenize(command),
+            Vec::from([String::from("cd"), String::from("~/Downloads/books")])
         );
     }
 }
