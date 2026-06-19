@@ -50,6 +50,20 @@ fn make_writer(redirect: &Option<Redirect>) -> Box<dyn io::Write> {
     }
 }
 
+fn make_handle(redirect: &Option<Redirect>) -> Option<fs::File> {
+    match redirect {
+        Some(r) => Some(match r.mode {
+            FileMode::Truncate => fs::File::create(&r.path).unwrap(),
+            FileMode::Append => fs::File::options()
+                .append(true)
+                .create(true)
+                .open(&r.path)
+                .unwrap(),
+        }),
+        None => None,
+    }
+}
+
 enum Backslash {
     Yes,
     No,
@@ -325,14 +339,12 @@ fn dispatch_command(pathenv: &str, parsed_command: ParsedCommand) -> ControlFlow
         }
         Command::External(bin, args) => {
             let mut stderr_writer = make_writer(&parsed_command.stderr_redirect);
-            let stderr_file = match parsed_command.stderr_redirect {
-                Some(r) => fs::File::create(&r.path).ok(),
-                None => None,
-            };
+            let stderr_file = make_handle(&parsed_command.stderr_redirect);
             if let Some(path) = resolve_path(pathenv, bin.as_str()) {
                 match parsed_command.stdout_redirect {
                     Some(r) => {
-                        if let Ok(f) = fs::File::create(&r.path) {
+                        let stdout_file = make_handle(&Some(r));
+                        if let Some(f) = stdout_file {
                             run_program(&path, bin.as_str(), &args, Some(f), stderr_file);
                         } else {
                             writeln!(stderr_writer, "Problem with file.").unwrap();
