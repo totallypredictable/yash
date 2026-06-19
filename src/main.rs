@@ -10,19 +10,6 @@ use std::process;
 
 const BUILTINS: &[&str] = &["exit", "echo", "type", "pwd", "cd"];
 
-fn env_ops<F, R>(action: F, cmd: &str, path: &Path) -> Option<R>
-where
-    F: FnOnce() -> io::Result<R>,
-{
-    match action() {
-        Ok(res) => Some(res),
-        Err(_) => {
-            eprintln!("{}: {}: No such file or directory", cmd, path.display());
-            None
-        }
-    }
-}
-
 fn resolve_path(pathenv: &str, command: &str) -> Option<PathBuf> {
     let rawpaths: Vec<&str> = pathenv.split(":").collect();
     for path in rawpaths {
@@ -47,8 +34,8 @@ fn read_input() -> String {
     command
 }
 
-fn make_writer(stdout_redirect: &Option<PathBuf>) -> Box<dyn io::Write> {
-    match stdout_redirect {
+fn make_writer(stdio_redirect: &Option<PathBuf>) -> Box<dyn io::Write> {
+    match stdio_redirect {
         Some(path) => Box::new(fs::File::create(path).unwrap()),
         None => Box::new(io::stdout()),
     }
@@ -160,6 +147,7 @@ enum Command {
 struct ParsedCommand {
     cmd: Command,
     stdout_redirect: Option<PathBuf>,
+    stderr_redirect: Option<PathBuf>,
 }
 
 impl ParsedCommand {
@@ -170,6 +158,7 @@ impl ParsedCommand {
         let mut words = collections::VecDeque::from(words);
         let first_token: String = words.pop_front().unwrap();
         let mut stdout_redirect: Option<PathBuf> = None;
+        let mut stderr_redirect: Option<PathBuf> = None;
         let mut remaining_tokens: Vec<String> = words.into_iter().collect();
         if let Some(idx) = (&remaining_tokens)
             .iter()
@@ -187,6 +176,19 @@ impl ParsedCommand {
                 }
             }
         }
+        if let Some(idx) = (&remaining_tokens).iter().position(|n| n == "2>") {
+            match remaining_tokens.get(idx + 1) {
+                Some(value) => {
+                    stderr_redirect = Some(PathBuf::from(value));
+                    remaining_tokens.remove(idx + 1);
+                    remaining_tokens.remove(idx);
+                }
+                None => {
+                    eprintln!("syntax error: expected filename after `2>`");
+                    return None;
+                }
+            }
+        }
         let command_type = match first_token.as_str() {
             "exit" => Command::Exit,
             "echo" => Command::Echo(remaining_tokens),
@@ -198,6 +200,7 @@ impl ParsedCommand {
         Some(ParsedCommand {
             cmd: command_type,
             stdout_redirect,
+            stderr_redirect,
         })
     }
 }
@@ -206,79 +209,102 @@ fn dispatch_command(pathenv: &str, parsed_command: ParsedCommand) -> ControlFlow
     match parsed_command.cmd {
         Command::Exit => ControlFlow::Break(()),
         Command::Echo(args) => {
-            let mut writer = make_writer(&parsed_command.stdout_redirect);
-            writeln!(writer, "{}", args.join(" ")).unwrap();
+            let mut stdout_writer = make_writer(&parsed_command.stdout_redirect);
+            writeln!(stdout_writer, "{}", args.join(" ")).unwrap();
             ControlFlow::Continue(())
         }
         Command::Type(cmds) => {
-            let mut writer = make_writer(&parsed_command.stdout_redirect);
+            let mut stdout_writer = make_writer(&parsed_command.stdout_redirect);
             for cmd in cmds {
                 if BUILTINS.contains(&&cmd.as_str()) {
-                    writeln!(writer, "{} is a shell builtin", cmd).unwrap();
+                    writeln!(stdout_writer, "{} is a shell builtin", cmd).unwrap();
                 } else if let Some(path) = resolve_path(pathenv, cmd.as_str()) {
-                    writeln!(writer, "{} is {}", cmd, path.display()).unwrap();
+                    writeln!(stdout_writer, "{} is {}", cmd, path.display()).unwrap();
                 } else {
-                    writeln!(writer, "{}: not found", cmd).unwrap();
+                    writeln!(stdout_writer, "{}: not found", cmd).unwrap();
                 }
             }
             ControlFlow::Continue(())
         }
         Command::Pwd => {
-            let mut writer = make_writer(&parsed_command.stdout_redirect);
+            let mut stdout_writer = make_writer(&parsed_command.stdout_redirect);
             if let Ok(path) = env::current_dir() {
-                writeln!(writer, "{}", path.display()).unwrap()
+                writeln!(stdout_writer, "{}", path.display()).unwrap()
             }
             ControlFlow::Continue(())
         }
         Command::Cd(path) => {
+            let mut stderr_writer = make_writer(&parsed_command.stderr_redirect);
+
             let target_path: Option<PathBuf> = match path.first() {
                 Some(p) => Some(PathBuf::from(p)),
                 None => match env::var("HOME") {
                     Ok(h) => Some(PathBuf::from(h)),
                     Err(_) => {
-                        eprintln!("cd: HOME not set");
+                        writeln!(stderr_writer, "cd: HOME not set").unwrap();
                         None
                     }
                 },
             };
 
             if let Some(path) = target_path {
-                env_ops(|| env::set_current_dir(&path), "cd", &path);
+                if let Err(_) = env::set_current_dir(&path) {
+                    writeln!(
+                        stderr_writer,
+                        "{}: {}: No such file or directory",
+                        "cd",
+                        path.display()
+                    )
+                    .unwrap();
+                }
             }
 
             ControlFlow::Continue(())
         }
         Command::External(bin, args) => {
+            let mut stderr_writer = make_writer(&parsed_command.stderr_redirect);
+            let stderr_file = match parsed_command.stderr_redirect {
+                Some(fpath) => fs::File::create(fpath).ok(),
+                None => None,
+            };
             if let Some(path) = resolve_path(pathenv, bin.as_str()) {
                 match parsed_command.stdout_redirect {
                     Some(fpath) => {
                         if let Ok(f) = fs::File::create(fpath) {
-                            run_program(&path, bin.as_str(), &args, Some(f));
+                            run_program(&path, bin.as_str(), &args, Some(f), stderr_file);
                         } else {
-                            eprintln!("Problem with file.");
+                            writeln!(stderr_writer, "Problem with file.").unwrap();
                         }
-                        ControlFlow::Continue(())
                     }
 
                     None => {
-                        run_program(&path, bin.as_str(), &args, None);
-                        ControlFlow::Continue(())
+                        run_program(&path, bin.as_str(), &args, None, stderr_file);
                     }
                 }
+                ControlFlow::Continue(())
             } else {
-                println!("{}: command not found", bin);
+                writeln!(stderr_writer, "{}: command not found", bin).unwrap();
                 ControlFlow::Continue(())
             }
         }
     }
 }
 
-fn run_program(path: &Path, bin: &str, args: &[String], stdout: Option<fs::File>) {
+fn run_program(
+    path: &Path,
+    bin: &str,
+    args: &[String],
+    stdout: Option<fs::File>,
+    stderr: Option<fs::File>,
+) {
     let mut cmd = process::Command::new(path);
     cmd.arg0(bin);
     cmd.args(args);
     if let Some(file) = stdout {
         cmd.stdout(file);
+    }
+    if let Some(file) = stderr {
+        cmd.stderr(file);
     }
     match cmd.spawn() {
         Ok(mut handle) => match handle.wait() {
