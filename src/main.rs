@@ -210,11 +210,13 @@ fn dispatch_command(pathenv: &str, parsed_command: ParsedCommand) -> ControlFlow
         Command::Exit => ControlFlow::Break(()),
         Command::Echo(args) => {
             let mut stdout_writer = make_writer(&parsed_command.stdout_redirect);
+            let _stderr_writer = make_writer(&parsed_command.stderr_redirect); // creates file if needed
             writeln!(stdout_writer, "{}", args.join(" ")).unwrap();
             ControlFlow::Continue(())
         }
         Command::Type(cmds) => {
             let mut stdout_writer = make_writer(&parsed_command.stdout_redirect);
+            let _stderr_writer = make_writer(&parsed_command.stderr_redirect); // creates file if needed
             for cmd in cmds {
                 if BUILTINS.contains(&&cmd.as_str()) {
                     writeln!(stdout_writer, "{} is a shell builtin", cmd).unwrap();
@@ -228,6 +230,7 @@ fn dispatch_command(pathenv: &str, parsed_command: ParsedCommand) -> ControlFlow
         }
         Command::Pwd => {
             let mut stdout_writer = make_writer(&parsed_command.stdout_redirect);
+            let _stderr_writer = make_writer(&parsed_command.stderr_redirect); // creates file if needed
             if let Ok(path) = env::current_dir() {
                 writeln!(stdout_writer, "{}", path.display()).unwrap()
             }
@@ -235,7 +238,6 @@ fn dispatch_command(pathenv: &str, parsed_command: ParsedCommand) -> ControlFlow
         }
         Command::Cd(path) => {
             let mut stderr_writer = make_writer(&parsed_command.stderr_redirect);
-
             let target_path: Option<PathBuf> = match path.first() {
                 Some(p) => Some(PathBuf::from(p)),
                 None => match env::var("HOME") {
