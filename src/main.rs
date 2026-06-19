@@ -34,9 +34,18 @@ fn read_input() -> String {
     command
 }
 
-fn make_writer(stdio_redirect: &Option<PathBuf>) -> Box<dyn io::Write> {
-    match stdio_redirect {
-        Some(path) => Box::new(fs::File::create(path).unwrap()),
+fn make_writer(redirect: &Option<Redirect>) -> Box<dyn io::Write> {
+    match redirect {
+        Some(r) => match r.mode {
+            FileMode::Truncate => Box::new(fs::File::create(&r.path).unwrap()),
+            FileMode::Append => Box::new(
+                fs::File::options()
+                    .append(true)
+                    .create(true)
+                    .open(&r.path)
+                    .unwrap(),
+            ),
+        },
         None => Box::new(io::stdout()),
     }
 }
@@ -44,6 +53,11 @@ fn make_writer(stdio_redirect: &Option<PathBuf>) -> Box<dyn io::Write> {
 enum Backslash {
     Yes,
     No,
+}
+
+enum FileMode {
+    Truncate,
+    Append,
 }
 
 enum TokenizerState {
@@ -146,8 +160,13 @@ enum Command {
 
 struct ParsedCommand {
     cmd: Command,
-    stdout_redirect: Option<PathBuf>,
-    stderr_redirect: Option<PathBuf>,
+    stdout_redirect: Option<Redirect>,
+    stderr_redirect: Option<Redirect>,
+}
+
+struct Redirect {
+    path: PathBuf,
+    mode: FileMode,
 }
 
 impl ParsedCommand {
@@ -157,8 +176,8 @@ impl ParsedCommand {
         }
         let mut words = collections::VecDeque::from(words);
         let first_token: String = words.pop_front().unwrap();
-        let mut stdout_redirect: Option<PathBuf> = None;
-        let mut stderr_redirect: Option<PathBuf> = None;
+        let mut stdout_redirect: Option<Redirect> = None;
+        let mut stderr_redirect: Option<Redirect> = None;
         let mut remaining_tokens: Vec<String> = words.into_iter().collect();
         if let Some(idx) = (&remaining_tokens)
             .iter()
@@ -166,7 +185,10 @@ impl ParsedCommand {
         {
             match remaining_tokens.get(idx + 1) {
                 Some(value) => {
-                    stdout_redirect = Some(PathBuf::from(value));
+                    stdout_redirect = Some(Redirect {
+                        path: PathBuf::from(value),
+                        mode: FileMode::Truncate,
+                    });
                     remaining_tokens.remove(idx + 1);
                     remaining_tokens.remove(idx);
                 }
@@ -176,15 +198,53 @@ impl ParsedCommand {
                 }
             }
         }
+        if let Some(idx) = (&remaining_tokens)
+            .iter()
+            .position(|n| n == ">>" || n == "1>>")
+        {
+            match remaining_tokens.get(idx + 1) {
+                Some(value) => {
+                    stdout_redirect = Some(Redirect {
+                        path: PathBuf::from(value),
+                        mode: FileMode::Append,
+                    });
+                    remaining_tokens.remove(idx + 1);
+                    remaining_tokens.remove(idx);
+                }
+                None => {
+                    eprintln!("syntax error: expected filename after `>>`");
+                    return None;
+                }
+            }
+        }
         if let Some(idx) = (&remaining_tokens).iter().position(|n| n == "2>") {
             match remaining_tokens.get(idx + 1) {
                 Some(value) => {
-                    stderr_redirect = Some(PathBuf::from(value));
+                    stderr_redirect = Some(Redirect {
+                        path: PathBuf::from(value),
+                        mode: FileMode::Truncate,
+                    });
                     remaining_tokens.remove(idx + 1);
                     remaining_tokens.remove(idx);
                 }
                 None => {
                     eprintln!("syntax error: expected filename after `2>`");
+                    return None;
+                }
+            }
+        }
+        if let Some(idx) = (&remaining_tokens).iter().position(|n| n == "2>>") {
+            match remaining_tokens.get(idx + 1) {
+                Some(value) => {
+                    stderr_redirect = Some(Redirect {
+                        path: PathBuf::from(value),
+                        mode: FileMode::Append,
+                    });
+                    remaining_tokens.remove(idx + 1);
+                    remaining_tokens.remove(idx);
+                }
+                None => {
+                    eprintln!("syntax error: expected filename after `2>>`");
                     return None;
                 }
             }
@@ -266,13 +326,13 @@ fn dispatch_command(pathenv: &str, parsed_command: ParsedCommand) -> ControlFlow
         Command::External(bin, args) => {
             let mut stderr_writer = make_writer(&parsed_command.stderr_redirect);
             let stderr_file = match parsed_command.stderr_redirect {
-                Some(fpath) => fs::File::create(fpath).ok(),
+                Some(r) => fs::File::create(&r.path).ok(),
                 None => None,
             };
             if let Some(path) = resolve_path(pathenv, bin.as_str()) {
                 match parsed_command.stdout_redirect {
-                    Some(fpath) => {
-                        if let Ok(f) = fs::File::create(fpath) {
+                    Some(r) => {
+                        if let Ok(f) = fs::File::create(&r.path) {
                             run_program(&path, bin.as_str(), &args, Some(f), stderr_file);
                         } else {
                             writeln!(stderr_writer, "Problem with file.").unwrap();
