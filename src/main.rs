@@ -46,7 +46,8 @@ fn read_input(root: &TrieNode) -> String {
         match byte[0] {
             0x0a => break,
             0x09 => {
-                let results = root.search(&buf);
+                let mut results = root.search(&buf);
+                results.sort();
                 if results.is_empty() {
                     print!("\x07");
                     io::stdout().flush().unwrap();
