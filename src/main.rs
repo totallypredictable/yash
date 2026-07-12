@@ -508,6 +508,9 @@ fn build_exec_db(pathenv: &str, root: &mut TrieNode) {
             }
         }
     }
+    for cmd in BUILTINS {
+        root.insert(cmd.to_string());
+    }
 }
 
 fn main() {
