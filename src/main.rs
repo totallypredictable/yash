@@ -67,6 +67,35 @@ fn read_input(root: &TrieNode) -> String {
                     continue;
                 }
                 if results.len() > 1 {
+                    let mut lcp = String::from(&buf);
+                    'outer: for (i, ch) in results[0].chars().skip(buf.len()).enumerate() {
+                        let mut all_match = true;
+                        for result in &results[1..] {
+                            if let Some(val) =
+                                result.chars().collect::<Vec<char>>().get(buf.len() + i)
+                            {
+                                if *val == ch {
+                                    continue;
+                                } else {
+                                    all_match = false;
+                                    break 'outer;
+                                }
+                            } else {
+                                break 'outer;
+                            }
+                        }
+                        if all_match {
+                            lcp.push(ch);
+                        }
+                    }
+                    if lcp.len() > buf.len() {
+                        print!("{}", &lcp[buf.len()..]);
+                        print!(" ");
+                        buf = lcp.clone();
+                        buf.push(' ');
+                        io::stdout().flush().unwrap();
+                        continue;
+                    }
                     if !tab {
                         print!("\x07");
                         io::stdout().flush().unwrap();
