@@ -39,6 +39,7 @@ fn read_input(root: &TrieNode) -> String {
 
     let mut buf: String = String::new();
     let mut byte = [0u8; 1];
+    let mut tab = false;
 
     loop {
         unsafe { read(0, byte.as_mut_ptr() as *mut libc::c_void, 1) };
@@ -63,6 +64,21 @@ fn read_input(root: &TrieNode) -> String {
                     print!(" ");
                     io::stdout().flush().unwrap();
                     continue;
+                }
+                if results.len() > 1 {
+                    if !tab {
+                        print!("\x07");
+                        io::stdout().flush().unwrap();
+                        tab = true;
+                        continue;
+                    } else {
+                        println!("\n{}", results.join("  "));
+                        prompt();
+                        print!("{buf}");
+                        io::stdout().flush().unwrap();
+                        tab = false;
+                        continue;
+                    }
                 }
             }
             0x7f => {
