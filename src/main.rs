@@ -46,6 +46,11 @@ fn read_input(root: &TrieNode) -> String {
             0x0a => break,
             0x09 => {
                 let results = root.search(&buf);
+                if results.is_empty() {
+                    print!("\x07");
+                    io::stdout().flush().unwrap();
+                    continue;
+                }
                 if results.len() == 1 {
                     for _ in 0..buf.len() {
                         print!("\x08 \x08");
