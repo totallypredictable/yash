@@ -90,9 +90,7 @@ fn read_input(root: &TrieNode) -> String {
                     }
                     if lcp.len() > buf.len() {
                         print!("{}", &lcp[buf.len()..]);
-                        print!(" ");
                         buf = lcp.clone();
-                        buf.push(' ');
                         io::stdout().flush().unwrap();
                         continue;
                     }
