@@ -1,6 +1,8 @@
-use std::collections;
+extern crate libc;
+use libc::{read, tcgetattr, tcsetattr};
+use std::collections::{self, HashMap};
 use std::env;
-use std::fs;
+use std::fs::{self, read_dir};
 #[allow(unused_imports)]
 use std::io::{self, Write};
 use std::ops::ControlFlow;
@@ -28,10 +30,54 @@ fn prompt() {
     io::stdout().flush().unwrap();
 }
 
-fn read_input() -> String {
-    let mut command: String = String::new();
-    io::stdin().read_line(&mut command).unwrap();
-    command
+fn read_input(root: &TrieNode) -> String {
+    let mut termios: libc::termios = unsafe { std::mem::zeroed() };
+    unsafe { tcgetattr(0, &mut termios) };
+    let orig_termios = termios; // C structs in libc implement Copy
+    termios.c_lflag &= !(libc::ICANON | libc::ECHO);
+    unsafe { tcsetattr(0, libc::TCSANOW, &termios) };
+
+    let mut buf: String = String::new();
+    let mut byte = [0u8; 1];
+
+    loop {
+        unsafe { read(0, byte.as_mut_ptr() as *mut libc::c_void, 1) };
+        match byte[0] {
+            0x0a => break,
+            0x09 => {
+                let results = root.search(&buf);
+                if results.len() == 1 {
+                    for _ in 0..buf.len() {
+                        print!("\x08 \x08");
+                        buf.pop();
+                        io::stdout().flush().unwrap();
+                    }
+                    buf = results[0].clone();
+                    print!("{}", buf);
+                    buf.push(' ');
+                    print!(" ");
+                    io::stdout().flush().unwrap();
+                    continue;
+                }
+            }
+            0x7f => {
+                if buf.len() != 0 {
+                    print!("\x08 \x08");
+                    buf.pop();
+                    io::stdout().flush().unwrap();
+                }
+            }
+            _ => {
+                buf.push(byte[0] as char);
+                print!("{}", byte[0] as char);
+                io::stdout().flush().unwrap();
+            }
+        }
+    }
+
+    unsafe { tcsetattr(0, libc::TCSANOW, &orig_termios) };
+    println!();
+    buf
 }
 
 fn make_writer(redirect: &Option<Redirect>) -> Box<dyn io::Write> {
@@ -389,13 +435,92 @@ fn run_program(
     }
 }
 
+struct TrieNode {
+    children: HashMap<char, Box<TrieNode>>,
+    terminal: bool,
+}
+
+impl TrieNode {
+    fn new() -> TrieNode {
+        TrieNode {
+            children: HashMap::new(),
+            terminal: false,
+        }
+    }
+
+    fn insert(&mut self, text: String) {
+        let mut tmp: &mut TrieNode = self;
+        for ch in (&text).chars() {
+            if !tmp.children.contains_key(&ch) {
+                tmp.children.insert(ch, Box::from(Self::new()));
+            }
+
+            tmp = &mut *tmp.children.get_mut(&ch).unwrap();
+        }
+
+        tmp.terminal = true;
+    }
+
+    fn search(&self, text: &str) -> Vec<String> {
+        let mut tmp: &TrieNode = self;
+        let mut results: Vec<String> = Vec::new();
+        for ch in (&text).chars() {
+            if tmp.children.contains_key(&ch) {
+                tmp = &*tmp.children.get(&ch).unwrap();
+            } else {
+                return results;
+            }
+        }
+        tmp.rec_search(&(text.to_string()), &mut results);
+
+        return results;
+    }
+
+    fn rec_search(&self, text: &String, results: &mut Vec<String>) {
+        if self.terminal == true {
+            results.push(text.to_string());
+            if self.children.len() == 0 {
+                return;
+            }
+        }
+        for key in self.children.keys() {
+            TrieNode::rec_search(
+                &*self.children[key],
+                &(text.to_string() + &key.to_string()),
+                results,
+            )
+        }
+    }
+}
+
+fn build_exec_db(pathenv: &str, root: &mut TrieNode) {
+    let rawpaths: Vec<&str> = pathenv.split(":").collect();
+    for path in rawpaths {
+        if let Ok(files) = fs::read_dir(path) {
+            for file in files {
+                let file_name = file.unwrap().file_name().into_string().unwrap();
+                let path = Path::new(path).join(&file_name);
+                if let Ok(metadata) = fs::metadata(&path) {
+                    if metadata.is_file() && (metadata.permissions().mode() & 0o111) != 0 {
+                        root.insert(file_name);
+                    }
+                }
+            }
+        }
+    }
+}
+
 fn main() {
     let pathenv = env::var("PATH").unwrap_or_else(|_| String::from("/usr/local/bin:/usr/bin:/bin"));
+
+    let mut root = TrieNode::new();
+
+    build_exec_db(&pathenv, &mut root);
 
     loop {
         prompt();
 
-        let command = read_input();
+        let command = read_input(&root);
 
         let words = tokenize(&command.trim());
 
