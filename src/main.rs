@@ -28,7 +28,7 @@ fn prompt() {
     io::stdout().flush().unwrap();
 }
 
-fn get_files_from_dir(dir: &Path) -> Vec<String> {
+fn search_dir(dir: &Path) -> Vec<String> {
     let mut files = Vec::new();
     if dir.is_dir() {
         if let Ok(drc) = fs::read_dir(dir) {
@@ -76,19 +76,33 @@ fn read_input(root: &TrieNode) -> String {
             0x09 => {
                 let args = tokenize(&buf);
                 let mut results;
-                let prefix;
+                let completion_prefix: String;
                 if args.len() == 1 && !buf.ends_with(' ') {
-                    prefix = buf.clone();
+                    completion_prefix = buf.clone();
                     results = root.search(&buf);
                 } else {
-                    let files = get_files_from_dir(Path::new("."));
-                    prefix = args.last().unwrap().clone();
+                    let full_path;
+                    completion_prefix = Path::new(args.last().unwrap())
+                        .file_name()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("")
+                        .to_string();
+
+                    if let Some(value) = Path::new(".").join(args.last().unwrap()).parent() {
+                        full_path = value.to_owned();
+                    } else {
+                        full_path = Path::new(".").to_owned();
+                    }
+
                     let mut tmp = Vec::new();
+                    let files = search_dir(&full_path);
+
                     for file in &files {
-                        if file.starts_with(&prefix) {
+                        if file.starts_with(&completion_prefix) {
                             tmp.push(file.to_owned());
                         }
                     }
+
                     results = tmp;
                 }
                 results.sort();
@@ -98,8 +112,8 @@ fn read_input(root: &TrieNode) -> String {
                     continue;
                 }
                 if results.len() == 1 {
-                    buf.push_str(&results[0][prefix.len()..]);
-                    print!("{}", &results[0][prefix.len()..]);
+                    buf.push_str(&results[0][completion_prefix.len()..]);
+                    print!("{}", &results[0][completion_prefix.len()..]);
                     buf.push(' ');
                     print!(" ");
                     io::stdout().flush().unwrap();
@@ -108,9 +122,9 @@ fn read_input(root: &TrieNode) -> String {
                 if results.len() > 1 {
                     let lcp = lcp(&results);
 
-                    if lcp.len() > prefix.len() {
-                        print!("{}", &lcp[prefix.len()..]);
-                        buf.push_str(&lcp[prefix.len()..]);
+                    if lcp.len() > completion_prefix.len() {
+                        print!("{}", &lcp[completion_prefix.len()..]);
+                        buf.push_str(&lcp[completion_prefix.len()..]);
                         io::stdout().flush().unwrap();
                         continue;
                     }
