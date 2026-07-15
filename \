@@ -28,34 +28,8 @@ fn prompt() {
     io::stdout().flush().unwrap();
 }
 
-fn get_files_from_dir(dir: &Path) -> Vec<String> {
-    let mut files = Vec::new();
-    if dir.is_dir() {
-        if let Ok(drc) = fs::read_dir(dir) {
-            for entry in drc {
-                if let Ok(entry) = entry {
-                    let path = entry.path();
-                    if path.is_file() {
-                        files.push(entry.file_name().into_string().unwrap());
-                    }
-                }
-            }
-        }
-    }
-
-    files
-}
-
-fn lcp(results: &[String]) -> String {
-    let mut lcp = String::new();
-    for (i, ch) in results[0].chars().enumerate() {
-        if results[1..].iter().all(|r| r.chars().nth(i) == Some(ch)) {
-            lcp.push(ch);
-        } else {
-            break;
-        }
-    }
-    lcp
+fn get_files_from_dir(path: &Path) {
+    if let Ok(fls) = fs::read_dir(path);
 }
 
 fn read_input(root: &TrieNode) -> String {
@@ -75,58 +49,61 @@ fn read_input(root: &TrieNode) -> String {
             0x0a => break,
             0x09 => {
                 let args = tokenize(&buf);
-                let mut results;
-                let prefix;
                 if args.len() == 1 && !buf.ends_with(' ') {
-                    prefix = buf.clone();
-                    results = root.search(&buf);
-                } else {
-                    let files = get_files_from_dir(Path::new("."));
-                    prefix = args.last().unwrap().clone();
-                    let mut tmp = Vec::new();
-                    for file in &files {
-                        if file.starts_with(&prefix) {
-                            tmp.push(file.to_owned());
-                        }
-                    }
-                    results = tmp;
-                }
-                results.sort();
-                if results.is_empty() {
-                    print!("\x07");
-                    io::stdout().flush().unwrap();
-                    continue;
-                }
-                if results.len() == 1 {
-                    buf.push_str(&results[0][prefix.len()..]);
-                    print!("{}", &results[0][prefix.len()..]);
-                    buf.push(' ');
-                    print!(" ");
-                    io::stdout().flush().unwrap();
-                    continue;
-                }
-                if results.len() > 1 {
-                    let lcp = lcp(&results);
-
-                    if lcp.len() > prefix.len() {
-                        print!("{}", &lcp[prefix.len()..]);
-                        buf.push_str(&lcp[prefix.len()..]);
-                        io::stdout().flush().unwrap();
-                        continue;
-                    }
-                    if !tab {
+                    let mut results = root.search(&buf);
+                    results.sort();
+                    if results.is_empty() {
                         print!("\x07");
                         io::stdout().flush().unwrap();
-                        tab = true;
-                        continue;
-                    } else {
-                        println!("\n{}", results.join("  "));
-                        prompt();
-                        print!("{buf}");
-                        io::stdout().flush().unwrap();
-                        tab = false;
                         continue;
                     }
+                    if results.len() == 1 {
+                        for _ in 0..buf.len() {
+                            print!("\x08 \x08");
+                            buf.pop();
+                            io::stdout().flush().unwrap();
+                        }
+                        buf = results[0].clone();
+                        print!("{}", buf);
+                        buf.push(' ');
+                        print!(" ");
+                        io::stdout().flush().unwrap();
+                        continue;
+                    }
+                    if results.len() > 1 {
+                        let mut lcp = String::from(&buf);
+                        for (i, ch) in results[0].chars().skip(buf.len()).enumerate() {
+                            if results[1..]
+                                .iter()
+                                .all(|r| r.chars().nth(buf.len() + i) == Some(ch))
+                            {
+                                lcp.push(ch);
+                            } else {
+                                break;
+                            }
+                        }
+                        if lcp.len() > buf.len() {
+                            print!("{}", &lcp[buf.len()..]);
+                            buf = lcp.clone();
+                            io::stdout().flush().unwrap();
+                            continue;
+                        }
+                        if !tab {
+                            print!("\x07");
+                            io::stdout().flush().unwrap();
+                            tab = true;
+                            continue;
+                        } else {
+                            println!("\n{}", results.join("  "));
+                            prompt();
+                            print!("{buf}");
+                            io::stdout().flush().unwrap();
+                            tab = false;
+                            continue;
+                        }
+                    }
+                } else {
+                    todo!();
                 }
             }
             0x7f => {
@@ -626,17 +603,5 @@ mod tests {
             tokenize(command),
             Vec::from([String::from("cd"), String::from("~/Downloads/books")])
         );
-    }
-
-    #[test]
-    fn test_lcp() {
-        assert_eq!(
-            lcp(&[
-                "alex".to_string(),
-                "alexandra".to_string(),
-                "alexis".to_string()
-            ]),
-            "alex".to_string()
-        )
     }
 }
