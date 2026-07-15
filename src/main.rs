@@ -87,7 +87,10 @@ fn read_input(root: &TrieNode) -> String {
                     results = root.search(&buf);
                 } else {
                     let full_path;
-                    if args.last().unwrap().ends_with('/') {
+                    if buf.ends_with(' ') {
+                        full_path = Path::new(".").to_owned();
+                        completion_prefix = String::new();
+                    } else if args.last().unwrap().ends_with('/') {
                         full_path = Path::new(".").join(args.last().unwrap()).to_owned();
                         completion_prefix = String::new();
                     } else {
@@ -112,6 +115,11 @@ fn read_input(root: &TrieNode) -> String {
                         }
                     }
                     results = tmp;
+
+                    // eprintln!(
+                    //     "full_path: {:?} \t completion_prefix {:?}",
+                    //     full_path, completion_prefix
+                    // );
                 }
 
                 results.sort();
@@ -223,6 +231,7 @@ enum TokenizerState {
 }
 
 fn tokenize(command: &str) -> Vec<String> {
+    // TODO: need a way to indicate if args[0] was complete or not
     let mut state = TokenizerState::Normal(Backslash::No);
     let mut args: Vec<String> = Vec::new();
     let mut buffer = String::new();
@@ -662,6 +671,11 @@ mod tests {
                 "alexis".to_string()
             ]),
             "alex".to_string()
-        )
+        );
+    }
+
+    #[test]
+    fn test_tokenize() {
+        assert_eq!(tokenize("ls "), ["ls".to_string()]);
     }
 }
