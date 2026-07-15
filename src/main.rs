@@ -82,16 +82,20 @@ fn read_input(root: &TrieNode) -> String {
                     results = root.search(&buf);
                 } else {
                     let full_path;
-                    completion_prefix = Path::new(args.last().unwrap())
-                        .file_name()
-                        .and_then(|s| s.to_str())
-                        .unwrap_or("")
-                        .to_string();
-
-                    if let Some(value) = Path::new(".").join(args.last().unwrap()).parent() {
-                        full_path = value.to_owned();
+                    if args.last().unwrap().ends_with('/') {
+                        full_path = Path::new(".").join(args.last().unwrap()).to_owned();
+                        completion_prefix = String::new();
                     } else {
-                        full_path = Path::new(".").to_owned();
+                        full_path = Path::new(".")
+                            .join(args.last().unwrap())
+                            .parent()
+                            .unwrap_or(Path::new("."))
+                            .to_owned();
+                        completion_prefix = Path::new(args.last().unwrap())
+                            .file_name()
+                            .and_then(|s| s.to_str())
+                            .unwrap_or("")
+                            .to_string();
                     }
 
                     let mut tmp = Vec::new();
@@ -102,9 +106,9 @@ fn read_input(root: &TrieNode) -> String {
                             tmp.push(file.to_owned());
                         }
                     }
-
                     results = tmp;
                 }
+
                 results.sort();
                 if results.is_empty() {
                     print!("\x07");
