@@ -38,6 +38,11 @@ fn search_dir(dir: &Path) -> Vec<String> {
                     if path.is_file() {
                         files.push(entry.file_name().into_string().unwrap());
                     }
+                    if path.is_dir() {
+                        let mut s = entry.file_name().into_string().unwrap();
+                        s.push_str("/");
+                        files.push(s);
+                    }
                 }
             }
         }
@@ -118,8 +123,10 @@ fn read_input(root: &TrieNode) -> String {
                 if results.len() == 1 {
                     buf.push_str(&results[0][completion_prefix.len()..]);
                     print!("{}", &results[0][completion_prefix.len()..]);
-                    buf.push(' ');
-                    print!(" ");
+                    if !buf.ends_with("/") {
+                        buf.push(' ');
+                        print!(" ");
+                    }
                     io::stdout().flush().unwrap();
                     continue;
                 }
