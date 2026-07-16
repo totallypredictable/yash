@@ -63,7 +63,7 @@ fn lcp(results: &[String]) -> String {
     lcp
 }
 
-fn read_input(root: &TrieNode) -> String {
+fn read_input(root: &TrieNode, complete_db: &HashMap<String, Vec<String>>) -> String {
     let mut termios: libc::termios = unsafe { std::mem::zeroed() };
     unsafe { tcgetattr(0, &mut termios) };
     let orig_termios = termios; // C structs in libc implement Copy
@@ -114,12 +114,17 @@ fn read_input(root: &TrieNode) -> String {
                             tmp.push(file.to_owned());
                         }
                     }
-                    results = tmp;
 
-                    // eprintln!(
-                    //     "full_path: {:?} \t completion_prefix {:?}",
-                    //     full_path, completion_prefix
-                    // );
+                    if let Some(value) = complete_db.get(&args[0]) {
+                        let output = run_completer_script(Path::new(&value[0]));
+                        let stdout_result = String::from_utf8(output.stdout).unwrap();
+                        let outputs = stdout_result.split('\n');
+
+                        for output in outputs {
+                            tmp.push(output.to_owned());
+                        }
+                    }
+                    results = tmp;
                 }
 
                 results.sort();
@@ -577,6 +582,18 @@ fn run_program(
     }
 }
 
+fn run_completer_script(path: &Path) -> std::process::Output {
+    let mut cmd = process::Command::new(path)
+        .spawn()
+        .expect("Failed to run the completer script");
+
+    let output = cmd
+        .wait_with_output()
+        .expect("Failed to wait on the completer script");
+
+    output
+}
+
 struct TrieNode {
     children: HashMap<char, Box<TrieNode>>,
     terminal: bool,
@@ -664,7 +681,7 @@ fn main() {
     loop {
         prompt();
 
-        let command = read_input(&root);
+        let command = read_input(&root, &complete_db);
 
         let words = tokenize(&command.trim());
 
