@@ -118,13 +118,13 @@ fn read_input(root: &TrieNode, complete_db: &HashMap<String, Vec<String>>) -> St
                                 tmp.push(output.to_owned());
                             }
                         }
-                    } else {
-                        let files = search_dir(&full_path);
+                    }
 
-                        for file in &files {
-                            if file.starts_with(&completion_prefix) {
-                                tmp.push(file.to_owned());
-                            }
+                    let files = search_dir(&full_path);
+
+                    for file in &files {
+                        if file.starts_with(&completion_prefix) {
+                            tmp.push(file.to_owned());
                         }
                     }
 
