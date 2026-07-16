@@ -320,6 +320,7 @@ enum Command {
     Type(Vec<String>),
     Pwd,
     Cd(Vec<String>),
+    Complete(Vec<String>),
     External(String, Vec<String>),
 }
 
@@ -420,6 +421,7 @@ impl ParsedCommand {
             "type" => Command::Type(remaining_tokens),
             "pwd" => Command::Pwd,
             "cd" => Command::Cd(remaining_tokens),
+            "complete" => Command::Complete(remaining_tokens),
             _ => Command::External(first_token, remaining_tokens),
         };
         Some(ParsedCommand {
@@ -484,6 +486,21 @@ fn dispatch_command(pathenv: &str, parsed_command: ParsedCommand) -> ControlFlow
                     )
                     .unwrap();
                 }
+            }
+
+            ControlFlow::Continue(())
+        }
+        Command::Complete(args) => {
+            let mut stderr_writer = make_writer(&parsed_command.stderr_redirect); // creates file if needed
+            if args[0] == "-p".to_owned() {
+                writeln!(
+                    stderr_writer,
+                    "complete: {}: no completion specification",
+                    args[1]
+                )
+                .unwrap();
+            } else {
+                unimplemented!();
             }
 
             ControlFlow::Continue(())
@@ -677,5 +694,9 @@ mod tests {
     #[test]
     fn test_tokenize() {
         assert_eq!(tokenize("ls "), ["ls".to_string()]);
+        assert_eq!(
+            tokenize("complete -p git"),
+            ["complete".to_string(), "-p".to_string(), "git".to_string()]
+        );
     }
 }
