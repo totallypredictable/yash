@@ -132,7 +132,6 @@ fn read_input(root: &TrieNode, complete_db: &HashMap<String, Vec<String>>) -> St
                 }
 
                 results.sort();
-                eprintln!("RESULTS: {:?}", results);
 
                 if results.is_empty() {
                     print!("\x07");
