@@ -592,6 +592,7 @@ fn run_program(
 
 fn run_completer_script(path: &Path) -> std::process::Output {
     let mut cmd = process::Command::new(path)
+        .stdout(process::Stdio::piped())
         .spawn()
         .expect("Failed to run the completer script");
 
