@@ -591,8 +591,10 @@ fn run_completer_script(path: &Path, args: &Vec<String>) -> std::process::Output
     let args_list: Vec<String>;
     if args.len() == 2 {
         args_list = vec![args[0].clone(), args[1].clone(), String::from("")];
-    } else {
+    } else if args.len() == 3 {
         args_list = vec![args[0].clone(), args[2].clone(), args[1].clone()];
+    } else {
+        args_list = vec![String::from("")];
     }
     let cmd = process::Command::new(path)
         .args(args_list)
