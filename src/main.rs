@@ -589,7 +589,7 @@ fn run_program(
 
 fn run_completer_script(path: &Path, args: &Vec<String>) -> std::process::Output {
     let cmd = process::Command::new(path)
-        .args(args)
+        .args(vec![&args[0], &args[2], &args[1]])
         .stdout(process::Stdio::piped())
         .spawn()
         .expect("Failed to run the completer script");
