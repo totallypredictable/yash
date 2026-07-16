@@ -110,9 +110,8 @@ fn read_input(root: &TrieNode, complete_db: &HashMap<String, Vec<String>>) -> St
 
                     if let Some(value) = complete_db.get(&args[0]) {
                         let output = run_completer_script(Path::new(&value[0]));
-                        eprintln!("STDOUT_RAW: {:?}", output.stdout);
                         let stdout_result = String::from_utf8(output.stdout).unwrap();
-                        let outputs = stdout_result.split('\n');
+                        let outputs = stdout_result.trim().split('\n');
 
                         for output in outputs {
                             if output.starts_with(&completion_prefix) {
