@@ -107,13 +107,6 @@ fn read_input(root: &TrieNode, complete_db: &HashMap<String, Vec<String>>) -> St
                     }
 
                     let mut tmp = Vec::new();
-                    let files = search_dir(&full_path);
-
-                    for file in &files {
-                        if file.starts_with(&completion_prefix) {
-                            tmp.push(file.to_owned());
-                        }
-                    }
 
                     if let Some(value) = complete_db.get(&args[0]) {
                         let output = run_completer_script(Path::new(&value[0]));
@@ -123,7 +116,16 @@ fn read_input(root: &TrieNode, complete_db: &HashMap<String, Vec<String>>) -> St
                         for output in outputs {
                             tmp.push(output.to_owned());
                         }
+                    } else {
+                        let files = search_dir(&full_path);
+
+                        for file in &files {
+                            if file.starts_with(&completion_prefix) {
+                                tmp.push(file.to_owned());
+                            }
+                        }
                     }
+
                     results = tmp;
                 }
 
