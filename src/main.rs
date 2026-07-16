@@ -432,7 +432,11 @@ impl ParsedCommand {
     }
 }
 
-fn dispatch_command(pathenv: &str, parsed_command: ParsedCommand) -> ControlFlow<()> {
+fn dispatch_command(
+    pathenv: &str,
+    parsed_command: ParsedCommand,
+    complete_db: &mut HashMap<String, Vec<String>>,
+) -> ControlFlow<()> {
     match parsed_command.cmd {
         Command::Exit => ControlFlow::Break(()),
         Command::Echo(args) => {
@@ -491,16 +495,32 @@ fn dispatch_command(pathenv: &str, parsed_command: ParsedCommand) -> ControlFlow
             ControlFlow::Continue(())
         }
         Command::Complete(args) => {
+            let mut stdout_writer = make_writer(&parsed_command.stdout_redirect);
             let mut stderr_writer = make_writer(&parsed_command.stderr_redirect); // creates file if needed
-            if args[0] == "-p".to_owned() {
-                writeln!(
-                    stderr_writer,
-                    "complete: {}: no completion specification",
-                    args[1]
-                )
-                .unwrap();
-            } else {
-                unimplemented!();
+            let key = args.last().unwrap();
+            match args[0].as_str() {
+                "-p" => {
+                    if let Some(value) = complete_db.get(key) {
+                        writeln!(stdout_writer, "complete -C '{}' {}", value[0], key).unwrap();
+                    } else {
+                        writeln!(
+                            stderr_writer,
+                            "complete: {}: no completion specification",
+                            args[1]
+                        )
+                        .unwrap();
+                    }
+                }
+                "-C" => {
+                    if let Some(value) = complete_db.get_mut(key) {
+                        value.push(args[args.len() - 2].clone());
+                    } else {
+                        complete_db.insert(key.clone(), vec![args[args.len() - 2].clone()]);
+                    }
+                }
+                _ => {
+                    unimplemented!();
+                }
             }
 
             ControlFlow::Continue(())
@@ -639,6 +659,8 @@ fn main() {
 
     build_exec_db(&pathenv, &mut root);
 
+    let mut complete_db = HashMap::new();
+
     loop {
         prompt();
 
@@ -647,7 +669,9 @@ fn main() {
         let words = tokenize(&command.trim());
 
         if let Some(parsed_command) = ParsedCommand::new(words) {
-            if let ControlFlow::Break(_) = dispatch_command(&pathenv, parsed_command) {
+            if let ControlFlow::Break(_) =
+                dispatch_command(&pathenv, parsed_command, &mut complete_db)
+            {
                 break;
             }
         }
