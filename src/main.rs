@@ -112,6 +112,7 @@ fn read_input(root: &TrieNode, complete_db: &HashMap<String, Vec<String>>) -> St
                     if let Some(value) = complete_db.get(&args[0]) {
                         env_vars.push(("COMP_LINE".to_string(), buf.clone()));
                         env_vars.push(("COMP_POINT".to_string(), buf.len().to_string()));
+                        eprintln!("ARGS: {:?}", args);
                         let output =
                             run_completer_script(Path::new(&value[0]), &args, env_vars.clone());
                         let stdout_result = String::from_utf8(output.stdout).unwrap();
