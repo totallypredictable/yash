@@ -137,6 +137,9 @@ fn read_input(root: &TrieNode, complete_db: &HashMap<String, Vec<String>>) -> St
 
                 results.sort();
 
+                eprintln!("RESULTS: {:?}", results);
+                eprintln!("COMPLETION_PREFIX: {:?}", completion_prefix);
+
                 if results.is_empty() {
                     print!("\x07");
                     io::stdout().flush().unwrap();
