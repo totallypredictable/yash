@@ -8,7 +8,7 @@ use std::os::unix::{fs::PermissionsExt, process::CommandExt};
 use std::path::{Path, PathBuf};
 use std::process;
 
-const BUILTINS: &[&str] = &["exit", "echo", "type", "pwd", "cd", "complete"];
+const BUILTINS: &[&str] = &["exit", "echo", "type", "pwd", "cd", "complete", "jobs"];
 
 fn resolve_path(pathenv: &str, command: &str) -> Option<PathBuf> {
     let rawpaths: Vec<&str> = pathenv.split(":").collect();
@@ -335,6 +335,7 @@ enum Command {
     Pwd,
     Cd(Vec<String>),
     Complete(Vec<String>),
+    Jobs,
     External(String, Vec<String>),
 }
 
@@ -436,6 +437,7 @@ impl ParsedCommand {
             "pwd" => Command::Pwd,
             "cd" => Command::Cd(remaining_tokens),
             "complete" => Command::Complete(remaining_tokens),
+            "jobs" => Command::Jobs,
             _ => Command::External(first_token, remaining_tokens),
         };
         Some(ParsedCommand {
@@ -541,6 +543,9 @@ fn dispatch_command(
             }
 
             ControlFlow::Continue(())
+        }
+        Command::Jobs => {
+            todo!();
         }
         Command::External(bin, args) => {
             let mut stderr_writer = make_writer(&parsed_command.stderr_redirect);
