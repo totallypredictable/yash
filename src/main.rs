@@ -118,7 +118,9 @@ fn read_input(root: &TrieNode, complete_db: &HashMap<String, Vec<String>>) -> St
                         let outputs = stdout_result.trim().split('\n');
 
                         for output in outputs {
-                            tmp.push(output.to_owned());
+                            if output.starts_with(&completion_prefix) {
+                                tmp.push(output.to_owned());
+                            }
                         }
                     } else {
                         let files = search_dir(&full_path);
