@@ -107,9 +107,13 @@ fn read_input(root: &TrieNode, complete_db: &HashMap<String, Vec<String>>) -> St
                     }
 
                     let mut tmp = Vec::new();
+                    let mut env_vars: Vec<(String, String)> = Vec::new();
 
                     if let Some(value) = complete_db.get(&args[0]) {
-                        let output = run_completer_script(Path::new(&value[0]), &args);
+                        env_vars.push(("COMP_LINE".to_string(), buf.clone()));
+                        env_vars.push(("COMP_POINT".to_string(), buf.len().to_string()));
+                        let output =
+                            run_completer_script(Path::new(&value[0]), &args, env_vars.clone());
                         let stdout_result = String::from_utf8(output.stdout).unwrap();
                         let outputs = stdout_result.trim().split('\n');
 
@@ -587,7 +591,11 @@ fn run_program(
     }
 }
 
-fn run_completer_script(path: &Path, args: &Vec<String>) -> std::process::Output {
+fn run_completer_script(
+    path: &Path,
+    args: &Vec<String>,
+    env_vars: Vec<(String, String)>,
+) -> std::process::Output {
     let args_list: Vec<String>;
     if args.len() == 2 {
         args_list = vec![args[0].clone(), args[1].clone(), String::from("")];
@@ -597,6 +605,7 @@ fn run_completer_script(path: &Path, args: &Vec<String>) -> std::process::Output
         args_list = vec![String::from("")];
     }
     let cmd = process::Command::new(path)
+        .envs(env_vars)
         .args(args_list)
         .stdout(process::Stdio::piped())
         .spawn()
