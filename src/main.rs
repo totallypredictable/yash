@@ -544,9 +544,7 @@ fn dispatch_command(
 
             ControlFlow::Continue(())
         }
-        Command::Jobs => {
-            todo!();
-        }
+        Command::Jobs => ControlFlow::Continue(()),
         Command::External(bin, args) => {
             let mut stderr_writer = make_writer(&parsed_command.stderr_redirect);
             let stderr_file = make_handle(&parsed_command.stderr_redirect);
