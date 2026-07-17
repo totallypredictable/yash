@@ -599,7 +599,7 @@ fn run_completer_script(
 ) -> std::process::Output {
     let args_list: Vec<String>;
     if args.len() == 2 {
-        args_list = vec![args[0].clone(), String::from(""), args[1].clone()];
+        args_list = vec![args[0].clone(), args[1].clone(), args[0].clone()];
     } else if args.len() == 3 {
         args_list = vec![args[0].clone(), args[2].clone(), args[1].clone()];
     } else {
