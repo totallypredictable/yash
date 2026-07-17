@@ -605,7 +605,6 @@ fn run_completer_script(
         args_list = vec![String::from("")];
     }
     let cmd = process::Command::new(path)
-        .env_clear()
         .envs(env_vars)
         .args(args_list)
         .stdout(process::Stdio::piped())
