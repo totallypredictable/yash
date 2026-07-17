@@ -532,6 +532,9 @@ fn dispatch_command(
                         complete_db.insert(key.clone(), vec![args[args.len() - 2].clone()]);
                     }
                 }
+                "-r" => {
+                    complete_db.remove(key);
+                }
                 _ => {
                     unimplemented!();
                 }
