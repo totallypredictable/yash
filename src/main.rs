@@ -1,27 +1,20 @@
+use crate::env::{BUILTINS, build_exec_db, resolve_path};
 use libc::{read, tcgetattr, tcsetattr};
-use std::collections::{self, HashMap};
-use std::env;
+use std::collections::HashMap;
 use std::fs::{self};
 use std::io::{self, Write};
 use std::ops::ControlFlow;
-use std::os::unix::{fs::PermissionsExt, process::CommandExt};
+use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process;
 
-const BUILTINS: &[&str] = &["exit", "echo", "type", "pwd", "cd", "complete", "jobs"];
-
-fn resolve_path(pathenv: &str, command: &str) -> Option<PathBuf> {
-    let rawpaths: Vec<&str> = pathenv.split(":").collect();
-    for path in rawpaths {
-        let path = Path::new(path).join(command);
-        if let Ok(metadata) = fs::metadata(&path) {
-            if metadata.is_file() && (metadata.permissions().mode() & 0o111) != 0 {
-                return Some(path);
-            }
-        }
-    }
-    return None;
-}
+mod env;
+mod parser;
+mod tokenizer;
+mod trie;
+use parser::{Command, FileMode, ParsedCommand, Redirect};
+use tokenizer::tokenize;
+use trie::TrieNode;
 
 fn prompt() {
     print!("$ ");
@@ -228,226 +221,6 @@ fn make_handle(redirect: &Option<Redirect>) -> Option<fs::File> {
     }
 }
 
-enum Backslash {
-    Yes,
-    No,
-}
-
-enum FileMode {
-    Truncate,
-    Append,
-}
-
-enum TokenizerState {
-    Normal(Backslash),
-    InSingleQuote,
-    InDoubleQuote(Backslash),
-}
-
-fn tokenize(command: &str) -> Vec<String> {
-    // TODO: need a way to indicate if args[0] was complete or not
-    let mut state = TokenizerState::Normal(Backslash::No);
-    let mut args: Vec<String> = Vec::new();
-    let mut buffer = String::new();
-    let mut has_quotes = false;
-
-    for ch in command.chars() {
-        state = match state {
-            TokenizerState::Normal(Backslash::No) => match ch {
-                ' ' => {
-                    if !buffer.is_empty() || has_quotes {
-                        args.push(std::mem::take(&mut buffer));
-                        has_quotes = false;
-                    }
-                    TokenizerState::Normal(Backslash::No)
-                }
-                '\\' => TokenizerState::Normal(Backslash::Yes),
-                '"' => TokenizerState::InDoubleQuote(Backslash::No),
-                '\'' => TokenizerState::InSingleQuote,
-                '~' => {
-                    if !buffer.is_empty() {
-                        buffer.push(ch);
-                    } else if let Ok(home) = env::var("HOME") {
-                        buffer.push_str(&home);
-                    } else {
-                        buffer.push(ch);
-                    }
-                    TokenizerState::Normal(Backslash::No)
-                }
-                _ => {
-                    buffer.push(ch);
-                    TokenizerState::Normal(Backslash::No)
-                }
-            },
-
-            TokenizerState::Normal(Backslash::Yes) => {
-                buffer.push(ch);
-                TokenizerState::Normal(Backslash::No)
-            }
-
-            TokenizerState::InDoubleQuote(Backslash::No) => match ch {
-                '\\' => TokenizerState::InDoubleQuote(Backslash::Yes),
-                '"' => {
-                    has_quotes = true;
-                    TokenizerState::Normal(Backslash::No)
-                }
-                _ => {
-                    buffer.push(ch);
-                    TokenizerState::InDoubleQuote(Backslash::No)
-                }
-            },
-
-            TokenizerState::InDoubleQuote(Backslash::Yes) => match ch {
-                _ if (['"', '\\', '$', '`', '\n']).contains(&ch) => {
-                    buffer.push(ch);
-                    TokenizerState::InDoubleQuote(Backslash::No)
-                }
-                _ => {
-                    buffer.push('\\');
-                    buffer.push(ch);
-                    TokenizerState::InDoubleQuote(Backslash::No)
-                }
-            },
-
-            TokenizerState::InSingleQuote => match ch {
-                '\'' => {
-                    has_quotes = true;
-                    TokenizerState::Normal(Backslash::No)
-                }
-                _ => {
-                    buffer.push(ch);
-                    TokenizerState::InSingleQuote
-                }
-            },
-        };
-    }
-
-    if !buffer.is_empty() || has_quotes {
-        args.push(buffer);
-    }
-    args
-}
-
-enum Command {
-    Exit,
-    Echo(Vec<String>),
-    Type(Vec<String>),
-    Pwd,
-    Cd(Vec<String>),
-    Complete(Vec<String>),
-    Jobs,
-    External(String, Vec<String>),
-}
-
-struct ParsedCommand {
-    cmd: Command,
-    stdout_redirect: Option<Redirect>,
-    stderr_redirect: Option<Redirect>,
-}
-
-struct Redirect {
-    path: PathBuf,
-    mode: FileMode,
-}
-
-impl ParsedCommand {
-    fn new(words: Vec<String>) -> Option<Self> {
-        if words.is_empty() {
-            return None;
-        }
-        let mut words = collections::VecDeque::from(words);
-        let first_token: String = words.pop_front().unwrap();
-        let mut stdout_redirect: Option<Redirect> = None;
-        let mut stderr_redirect: Option<Redirect> = None;
-        let mut remaining_tokens: Vec<String> = words.into_iter().collect();
-        if let Some(idx) = (&remaining_tokens)
-            .iter()
-            .position(|n| n == ">" || n == "1>")
-        {
-            match remaining_tokens.get(idx + 1) {
-                Some(value) => {
-                    stdout_redirect = Some(Redirect {
-                        path: PathBuf::from(value),
-                        mode: FileMode::Truncate,
-                    });
-                    remaining_tokens.remove(idx + 1);
-                    remaining_tokens.remove(idx);
-                }
-                None => {
-                    eprintln!("syntax error: expected filename after `>`");
-                    return None;
-                }
-            }
-        }
-        if let Some(idx) = (&remaining_tokens)
-            .iter()
-            .position(|n| n == ">>" || n == "1>>")
-        {
-            match remaining_tokens.get(idx + 1) {
-                Some(value) => {
-                    stdout_redirect = Some(Redirect {
-                        path: PathBuf::from(value),
-                        mode: FileMode::Append,
-                    });
-                    remaining_tokens.remove(idx + 1);
-                    remaining_tokens.remove(idx);
-                }
-                None => {
-                    eprintln!("syntax error: expected filename after `>>`");
-                    return None;
-                }
-            }
-        }
-        if let Some(idx) = (&remaining_tokens).iter().position(|n| n == "2>") {
-            match remaining_tokens.get(idx + 1) {
-                Some(value) => {
-                    stderr_redirect = Some(Redirect {
-                        path: PathBuf::from(value),
-                        mode: FileMode::Truncate,
-                    });
-                    remaining_tokens.remove(idx + 1);
-                    remaining_tokens.remove(idx);
-                }
-                None => {
-                    eprintln!("syntax error: expected filename after `2>`");
-                    return None;
-                }
-            }
-        }
-        if let Some(idx) = (&remaining_tokens).iter().position(|n| n == "2>>") {
-            match remaining_tokens.get(idx + 1) {
-                Some(value) => {
-                    stderr_redirect = Some(Redirect {
-                        path: PathBuf::from(value),
-                        mode: FileMode::Append,
-                    });
-                    remaining_tokens.remove(idx + 1);
-                    remaining_tokens.remove(idx);
-                }
-                None => {
-                    eprintln!("syntax error: expected filename after `2>>`");
-                    return None;
-                }
-            }
-        }
-        let command_type = match first_token.as_str() {
-            "exit" => Command::Exit,
-            "echo" => Command::Echo(remaining_tokens),
-            "type" => Command::Type(remaining_tokens),
-            "pwd" => Command::Pwd,
-            "cd" => Command::Cd(remaining_tokens),
-            "complete" => Command::Complete(remaining_tokens),
-            "jobs" => Command::Jobs,
-            _ => Command::External(first_token, remaining_tokens),
-        };
-        Some(ParsedCommand {
-            cmd: command_type,
-            stdout_redirect,
-            stderr_redirect,
-        })
-    }
-}
-
 fn dispatch_command(
     pathenv: &str,
     parsed_command: ParsedCommand,
@@ -478,7 +251,7 @@ fn dispatch_command(
         Command::Pwd => {
             let mut stdout_writer = make_writer(&parsed_command.stdout_redirect);
             let _stderr_writer = make_writer(&parsed_command.stderr_redirect); // creates file if needed
-            if let Ok(path) = env::current_dir() {
+            if let Ok(path) = std::env::current_dir() {
                 writeln!(stdout_writer, "{}", path.display()).unwrap()
             }
             ControlFlow::Continue(())
@@ -487,7 +260,7 @@ fn dispatch_command(
             let mut stderr_writer = make_writer(&parsed_command.stderr_redirect);
             let target_path: Option<PathBuf> = match path.first() {
                 Some(p) => Some(PathBuf::from(p)),
-                None => match env::var("HOME") {
+                None => match std::env::var("HOME") {
                     Ok(h) => Some(PathBuf::from(h)),
                     Err(_) => {
                         writeln!(stderr_writer, "cd: HOME not set").unwrap();
@@ -497,7 +270,7 @@ fn dispatch_command(
             };
 
             if let Some(path) = target_path {
-                if let Err(_) = env::set_current_dir(&path) {
+                if let Err(_) = std::env::set_current_dir(&path) {
                     writeln!(
                         stderr_writer,
                         "{}: {}: No such file or directory",
@@ -597,6 +370,10 @@ fn run_program(
     }
 }
 
+fn run_bg_job() {
+    todo!();
+}
+
 fn run_completer_script(
     path: &Path,
     args: &Vec<String>,
@@ -624,83 +401,9 @@ fn run_completer_script(
     output
 }
 
-struct TrieNode {
-    children: HashMap<char, Box<TrieNode>>,
-    terminal: bool,
-}
-
-impl TrieNode {
-    fn new() -> TrieNode {
-        TrieNode {
-            children: HashMap::new(),
-            terminal: false,
-        }
-    }
-
-    fn insert(&mut self, text: String) {
-        let mut tmp: &mut TrieNode = self;
-        for ch in (&text).chars() {
-            if !tmp.children.contains_key(&ch) {
-                tmp.children.insert(ch, Box::from(Self::new()));
-            }
-
-            tmp = &mut *tmp.children.get_mut(&ch).unwrap();
-        }
-
-        tmp.terminal = true;
-    }
-
-    fn search(&self, text: &str) -> Vec<String> {
-        let mut tmp: &TrieNode = self;
-        let mut results: Vec<String> = Vec::new();
-        for ch in (&text).chars() {
-            if tmp.children.contains_key(&ch) {
-                tmp = &*tmp.children.get(&ch).unwrap();
-            } else {
-                return results;
-            }
-        }
-        tmp.rec_search(&(text.to_string()), &mut results);
-
-        return results;
-    }
-
-    fn rec_search(&self, text: &String, results: &mut Vec<String>) {
-        if self.terminal {
-            results.push(text.to_string());
-        }
-        for key in self.children.keys() {
-            TrieNode::rec_search(
-                &*self.children[key],
-                &(text.to_string() + &key.to_string()),
-                results,
-            )
-        }
-    }
-}
-
-fn build_exec_db(pathenv: &str, root: &mut TrieNode) {
-    let rawpaths: Vec<&str> = pathenv.split(":").collect();
-    for path in rawpaths {
-        if let Ok(files) = fs::read_dir(path) {
-            for file in files {
-                let file_name = file.unwrap().file_name().into_string().unwrap();
-                let path = Path::new(path).join(&file_name);
-                if let Ok(metadata) = fs::metadata(&path) {
-                    if metadata.is_file() && (metadata.permissions().mode() & 0o111) != 0 {
-                        root.insert(file_name);
-                    }
-                }
-            }
-        }
-    }
-    for cmd in BUILTINS {
-        root.insert(cmd.to_string());
-    }
-}
-
 fn main() {
-    let pathenv = env::var("PATH").unwrap_or_else(|_| String::from("/usr/local/bin:/usr/bin:/bin"));
+    let pathenv =
+        std::env::var("PATH").unwrap_or_else(|_| String::from("/usr/local/bin:/usr/bin:/bin"));
 
     let mut root = TrieNode::new();
 
@@ -768,6 +471,14 @@ mod tests {
         assert_eq!(
             tokenize("complete -p git"),
             ["complete".to_string(), "-p".to_string(), "git".to_string()]
+        );
+        assert_eq!(
+            tokenize(r#"cat "my ""#),
+            ["cat".to_string(), "my ".to_string()]
+        );
+        assert_eq!(
+            tokenize(r#"cat "\i""#),
+            ["cat".to_string(), r"\i".to_string()]
         );
     }
 }
