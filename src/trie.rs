@@ -1,4 +1,4 @@
-use crate::HashMap;
+use std::collections::HashMap;
 
 pub struct TrieNode {
     children: HashMap<char, Box<TrieNode>>,

@@ -9,7 +9,11 @@ pub enum Command {
     Cd(Vec<String>),
     Complete(Vec<String>),
     Jobs,
-    External(String, Vec<String>),
+    External {
+        bin: String,
+        args: Vec<String>,
+        background: bool,
+    },
 }
 
 pub enum FileMode {
@@ -34,6 +38,7 @@ impl ParsedCommand {
             return None;
         }
         let mut words = collections::VecDeque::from(words);
+        let background: bool;
         let first_token: String = words.pop_front().unwrap();
         let mut stdout_redirect: Option<Redirect> = None;
         let mut stderr_redirect: Option<Redirect> = None;
@@ -108,6 +113,14 @@ impl ParsedCommand {
                 }
             }
         }
+        if let Some(last_value) = remaining_tokens.last()
+            && last_value == "&"
+        {
+            background = true;
+            remaining_tokens.pop();
+        } else {
+            background = false;
+        }
         let command_type = match first_token.as_str() {
             "exit" => Command::Exit,
             "echo" => Command::Echo(remaining_tokens),
@@ -116,7 +129,11 @@ impl ParsedCommand {
             "cd" => Command::Cd(remaining_tokens),
             "complete" => Command::Complete(remaining_tokens),
             "jobs" => Command::Jobs,
-            _ => Command::External(first_token, remaining_tokens),
+            _ => Command::External {
+                bin: first_token,
+                args: remaining_tokens,
+                background,
+            },
         };
         Some(ParsedCommand {
             cmd: command_type,
