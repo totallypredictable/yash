@@ -112,17 +112,30 @@ pub fn dispatch_command(
             ControlFlow::Continue(())
         }
         Command::Jobs => {
-            reap(jobs);
-            let vec_len = jobs.len();
-            for (i, job) in jobs.into_iter().enumerate() {
-                if i == vec_len - 1 {
-                    println!("[{}]{}  {:<24}{} &", job.id, "+", "Running", job.command);
-                } else if i == vec_len - 2 {
-                    println!("[{}]{}  {:<24}{} &", job.id, "-", "Running", job.command);
+            let mut ids: Vec<usize> = jobs.iter().map(|j| j.id).collect();
+            ids.sort();
+            let max_id = ids.last().copied();
+            let second_id = ids.iter().rev().nth(1).copied();
+            jobs.retain_mut(|job| {
+                let marker = if Some(job.id) == max_id {
+                    "+"
+                } else if Some(job.id) == second_id {
+                    "-"
                 } else {
-                    println!("[{}]{}  {:<24}{} &", job.id, " ", "Running", job.command);
+                    " "
+                };
+                match job.child.try_wait() {
+                    Ok(Some(_)) => {
+                        println!("[{}]{}  {:<24}{}", job.id, marker, "Done", job.command);
+                        false
+                    }
+                    _ => {
+                        println!("[{}]{}  {:<24}{} &", job.id, marker, "Running", job.command);
+                        true
+                    }
                 }
-            }
+            });
+
             ControlFlow::Continue(())
         }
         Command::External {
@@ -170,9 +183,20 @@ pub fn dispatch_command(
 }
 
 pub fn reap(jobs: &mut Vec<Job>) {
+    let mut ids: Vec<usize> = jobs.iter().map(|j| j.id).collect();
+    ids.sort();
+    let max_id = ids.last().copied();
+    let second_id = ids.iter().rev().nth(1).copied();
     jobs.retain_mut(|job| match job.child.try_wait() {
         Ok(Some(_)) => {
-            println!("[{}]{}  {:<21}{}", job.id, "+", "Done", job.command);
+            let marker = if Some(job.id) == max_id {
+                "+"
+            } else if Some(job.id) == second_id {
+                "-"
+            } else {
+                " "
+            };
+            println!("[{}]{}  {:<21}{}", job.id, marker, "Done", job.command);
             false
         }
         Ok(None) => true,

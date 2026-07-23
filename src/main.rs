@@ -18,7 +18,7 @@ fn main() {
     let mut shell = Shell::new();
 
     loop {
-        shell.reap();
+        // shell.reap();
 
         prompt();
 
