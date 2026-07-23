@@ -112,8 +112,15 @@ pub fn dispatch_command(
             ControlFlow::Continue(())
         }
         Command::Jobs => {
-            for job in jobs {
-                println!("[{}]\tRunning\t{}", job.id, job.command);
+            let vec_len = jobs.len();
+            for (i, job) in jobs.into_iter().enumerate() {
+                if i == vec_len - 1 {
+                    println!("[{}]{}  {:<24}{}", job.id, "+", "Running", job.command);
+                } else if i == vec_len - 2 {
+                    println!("[{}]{}  {:<24}{}", job.id, "-", "Running", job.command);
+                } else {
+                    println!("[{}]{}  {:<24}{}", job.id, " ", "Running", job.command);
+                }
             }
             ControlFlow::Continue(())
         }
@@ -164,7 +171,7 @@ pub fn dispatch_command(
 pub fn reap(jobs: &mut Vec<Job>) {
     jobs.retain_mut(|job| match job.child.try_wait() {
         Ok(Some(_)) => {
-            println!("[{}]\tDone\t{}", job.id, job.command);
+            println!("[{}]{}  {:<24}{}", job.id, " ", "Done", job.command);
             false
         }
         Ok(None) => true,
