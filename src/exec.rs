@@ -139,11 +139,13 @@ pub fn dispatch_command(
                     spawn(&path, bin.as_str(), &args, stdout_file, stderr_file)
                 {
                     if background {
+                        let pid = child_proc.id();
                         jobs.push(Job {
                             id: jobs.iter().map(|j| j.id).max().unwrap_or(0) + 1,
                             command: bin.clone(),
                             child: child_proc,
-                        })
+                        });
+                        println!("[{}] {}", jobs.last().unwrap().id, pid);
                     } else {
                         if let Err(e) = child_proc.wait() {
                             eprintln!("{e}");
