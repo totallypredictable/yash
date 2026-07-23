@@ -138,6 +138,27 @@ pub fn dispatch_command(
 
             ControlFlow::Continue(())
         }
+        Command::Piped(args) => {
+            let path_1 = resolve_path(pathenv, &args[0][0]).unwrap();
+            let path_2 = resolve_path(pathenv, &args[1][0]).unwrap();
+            let mut child_1 = process::Command::new(&path_1)
+                .arg0(&args[0][0])
+                .args(&args[0][1..])
+                .stdout(process::Stdio::piped())
+                .spawn()
+                .expect("Failed to spawn process");
+            let mut child_2 = process::Command::new(&path_2)
+                .arg0(&args[1][0])
+                .args(&args[1][1..])
+                .stdin(process::Stdio::from(child_1.stdout.take().unwrap()))
+                .spawn()
+                .expect("Failed to spawn process");
+
+            child_1.wait().ok();
+            child_2.wait().ok();
+
+            ControlFlow::Continue(())
+        }
         Command::External {
             bin,
             args,
@@ -227,10 +248,6 @@ pub fn spawn(
             None
         }
     }
-}
-
-pub fn _run_bg_job() {
-    todo!();
 }
 
 pub fn make_writer(redirect: &Option<Redirect>) -> Box<dyn io::Write> {

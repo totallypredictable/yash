@@ -1,5 +1,6 @@
 use std::collections;
 use std::path::PathBuf;
+use std::process;
 
 pub enum Command {
     Exit,
@@ -9,6 +10,7 @@ pub enum Command {
     Cd(Vec<String>),
     Complete(Vec<String>),
     Jobs,
+    Piped(Vec<Vec<String>>),
     External {
         bin: String,
         args: Vec<String>,
@@ -33,11 +35,11 @@ pub struct ParsedCommand {
 }
 
 impl ParsedCommand {
-    pub fn new(words: Vec<String>) -> Option<Self> {
-        if words.is_empty() {
+    pub fn new(tokens: Vec<String>) -> Option<Self> {
+        if tokens.is_empty() {
             return None;
         }
-        let mut words = collections::VecDeque::from(words);
+        let mut words = collections::VecDeque::from(tokens.clone());
         let background: bool;
         let first_token: String = words.pop_front().unwrap();
         let mut stdout_redirect: Option<Redirect> = None;
@@ -129,6 +131,13 @@ impl ParsedCommand {
             "cd" => Command::Cd(remaining_tokens),
             "complete" => Command::Complete(remaining_tokens),
             "jobs" => Command::Jobs,
+            _ if let Some(idx) = (&tokens).iter().position(|n| n == "|") => {
+                let mut cmds: Vec<Vec<String>> = Vec::new();
+                let (slice_1, slice_2) = tokens.split_at(idx);
+                cmds.push(slice_1.to_vec());
+                cmds.push(slice_2[1..].to_vec());
+                Command::Piped(cmds)
+            }
             _ => Command::External {
                 bin: first_token,
                 args: remaining_tokens,
@@ -140,5 +149,20 @@ impl ParsedCommand {
             stdout_redirect,
             stderr_redirect,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tokenizer::tokenize;
+
+    #[test]
+    fn test_parsedcommand() {
+        let tokens = tokenize("cat /tmp/ant/file-32 | wc");
+        let Command::Piped(stages) = ParsedCommand::new(tokens).unwrap().cmd else {
+            panic!("expected Piped");
+        };
+        assert_eq!(stages, vec![vec!["cat", "/tmp/ant/file-32"], vec!["wc"]]);
     }
 }

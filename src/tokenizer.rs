@@ -93,3 +93,54 @@ pub fn tokenize(command: &str) -> Vec<String> {
     }
     args
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_tokenize() {
+        assert_eq!(tokenize("ls "), ["ls".to_string()]);
+        assert_eq!(
+            tokenize("complete -p git"),
+            ["complete".to_string(), "-p".to_string(), "git".to_string()]
+        );
+        assert_eq!(
+            tokenize(r#"cat "my ""#),
+            ["cat".to_string(), "my ".to_string()]
+        );
+        assert_eq!(
+            tokenize(r#"cat "\i""#),
+            ["cat".to_string(), r"\i".to_string()]
+        );
+        assert_eq!(
+            tokenize("cat file.txt | echo"),
+            ["cat", "file.txt", "|", "echo"]
+        );
+        assert_eq!(
+            tokenize("cat /tmp/ant/file-32 | wc"),
+            ["cat", "/tmp/ant/file-32", "|", "wc"]
+        );
+    }
+
+    #[test]
+    fn test_tilde() {
+        let command = "cd ~/Downloads/books";
+        assert_eq!(
+            tokenize(command),
+            Vec::from([
+                String::from("cd"),
+                String::from("/Users/nashjr/Downloads/books")
+            ])
+        );
+    }
+
+    #[test]
+    fn test_backslash() {
+        let command = "cd \\~/Downloads/books";
+        assert_eq!(
+            tokenize(command),
+            Vec::from([String::from("cd"), String::from("~/Downloads/books")])
+        );
+    }
+}
