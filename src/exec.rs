@@ -116,11 +116,11 @@ pub fn dispatch_command(
             let vec_len = jobs.len();
             for (i, job) in jobs.into_iter().enumerate() {
                 if i == vec_len - 1 {
-                    println!("[{}]{}  {:<24}{}", job.id, "+", "Running", job.command);
+                    println!("[{}]{}  {:<24}{} &", job.id, "+", "Running", job.command);
                 } else if i == vec_len - 2 {
-                    println!("[{}]{}  {:<24}{}", job.id, "-", "Running", job.command);
+                    println!("[{}]{}  {:<24}{} &", job.id, "-", "Running", job.command);
                 } else {
-                    println!("[{}]{}  {:<24}{}", job.id, " ", "Running", job.command);
+                    println!("[{}]{}  {:<24}{} &", job.id, " ", "Running", job.command);
                 }
             }
             ControlFlow::Continue(())
@@ -150,7 +150,7 @@ pub fn dispatch_command(
                         let pid = child_proc.id();
                         jobs.push(Job {
                             id: jobs.iter().map(|j| j.id).max().unwrap_or(0) + 1,
-                            command: format!("{} {} &", bin, args.join(" ")),
+                            command: format!("{} {}", bin, args.join(" ")),
                             child: child_proc,
                         });
                         println!("[{}] {}", jobs.last().unwrap().id, pid);
@@ -172,7 +172,7 @@ pub fn dispatch_command(
 pub fn reap(jobs: &mut Vec<Job>) {
     jobs.retain_mut(|job| match job.child.try_wait() {
         Ok(Some(_)) => {
-            println!("[{}]{}  {:<24}{}", job.id, " ", "Done", job.command);
+            println!("[{}]{}  {:<21}{}", job.id, "+", "Done", job.command);
             false
         }
         Ok(None) => true,
