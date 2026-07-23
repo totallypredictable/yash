@@ -112,6 +112,7 @@ pub fn dispatch_command(
             ControlFlow::Continue(())
         }
         Command::Jobs => {
+            reap(jobs);
             let vec_len = jobs.len();
             for (i, job) in jobs.into_iter().enumerate() {
                 if i == vec_len - 1 {
