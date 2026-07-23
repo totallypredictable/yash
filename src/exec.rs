@@ -149,7 +149,7 @@ pub fn dispatch_command(
                         let pid = child_proc.id();
                         jobs.push(Job {
                             id: jobs.iter().map(|j| j.id).max().unwrap_or(0) + 1,
-                            command: bin.clone(),
+                            command: format!("{} {} &", bin, args.join(" ")),
                             child: child_proc,
                         });
                         println!("[{}] {}", jobs.last().unwrap().id, pid);
